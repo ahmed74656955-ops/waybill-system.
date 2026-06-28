@@ -20,11 +20,9 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
 
-    <!-- ربط ملف التنسيقات الخارجي -->
     <link rel="stylesheet" href="./style.css">
 
     <style>
-        /* التنسيقات الأساسية مدمجة لضمان عمل النظام في كل الحالات */
         :root {
             --primary: #1e40af; 
             --primary-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
@@ -195,7 +193,6 @@
 </head>
 <body>
 
-    <!-- شاشة تسجيل الدخول المعزولة -->
     <div id="auth-screen" class="auth-overlay">
         <div class="auth-glass-panel">
             <div class="auth-header">
@@ -205,7 +202,7 @@
             </div>
             <form id="loginForm" onsubmit="AuthManager.handleLogin(event)">
                 <div class="auth-input-group">
-                    <input type="text" id="username" placeholder="كود الفرع (مثال: jeddah)" required autocomplete="off">
+                    <input type="text" id="username" placeholder="كود الفرع (مثال: sanaa)" required autocomplete="off">
                 </div>
                 <div class="auth-input-group">
                     <input type="password" id="password" placeholder="كلمة المرور" required>
@@ -301,6 +298,7 @@
                 </div>
 
                 <div id="overlays-layer"></div>
+                
                 <canvas id="qr-canvas" style="display:none;"></canvas>
                 <img id="barcode-img" style="display:none;">
                 
@@ -376,20 +374,25 @@
             });
         });
 
-        // 1. محرك المصادقة متعدد الفروع
+        // ==========================================
+        // 1. محرك المصادقة متعدد الفروع والتسلسل الذكي
+        // ==========================================
         const AuthManager = {
             usersDb: {
-                "jeddah": { pass: "994433", title: "فرع جدة", prefix: "jed" },
-                "dammam": { pass: "664433", title: "فرع الدمام", prefix: "dam" },
-                "riyadh": { pass: "550022", title: "فرع الرياض", prefix: "riy" },
-                "admin": { pass: "admin542", title: "الإدارة الرئيسية", prefix: "main" },
-                "ameer": { pass: "882211", title: "المهندس المطور", prefix: "dev" }
+                "sanaa": { pass: "225588", title: "فرع صنعاء", prefix: "SAN", startSeq: 10000 },
+                "taiz": { pass: "994433", title: "فرع تعز", prefix: "TAI", startSeq: 20000 },
+                "riyadh": { pass: "337766", title: "فرع الرياض", prefix: "RIY", startSeq: 30000 },
+                "main": { pass: "772233", title: "الإدارة الرئيسية", prefix: "MAIN", startSeq: 90000 },
+                "admin": { pass: "775899", title: "المهندس المطور", prefix: "DEV", startSeq: 99000 }
             },
+
             getPrefix() { return localStorage.getItem('waybill_branch_prefix') || 'default'; },
+
             init() {
                 const currentUser = localStorage.getItem('waybill_active_user');
                 const branchTitle = localStorage.getItem('waybill_branch_title');
                 const authScreen = document.getElementById('auth-screen');
+                
                 if (currentUser && branchTitle) {
                     authScreen.style.display = 'none';
                     document.getElementById('branch-title').innerText = "- " + branchTitle;
@@ -398,6 +401,7 @@
                     authScreen.style.visibility = 'visible';
                 }
             },
+
             handleLogin(e) {
                 e.preventDefault();
                 const btn = document.getElementById('loginBtn');
@@ -408,6 +412,7 @@
                 setTimeout(() => {
                     const inputUser = document.getElementById('username').value.trim().toLowerCase();
                     const inputPass = document.getElementById('password').value.trim();
+                    
                     if (this.usersDb.hasOwnProperty(inputUser) && this.usersDb[inputUser].pass === inputPass) {
                         const branchData = this.usersDb[inputUser];
                         localStorage.setItem('waybill_active_user', inputUser);
@@ -442,10 +447,29 @@
 
         const Utils = {
             debounce(func, wait) { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), wait); }; },
+            
+            // توليد البوليصة بالتسلسل الخاص بالفرع
             genAWB() {
+                const activeUser = localStorage.getItem('waybill_active_user') || 'admin';
+                const branchData = AuthManager.usersDb[activeUser] || AuthManager.usersDb['admin'];
+                const prefix = branchData.prefix;
+                
+                const counterKey = `awb_counter_${prefix}`;
+                let currentCount = parseInt(localStorage.getItem(counterKey));
+                
+                if (isNaN(currentCount)) {
+                    currentCount = branchData.startSeq;
+                } else {
+                    currentCount++;
+                }
+                
+                localStorage.setItem(counterKey, currentCount);
+                
                 const now = new Date();
-                const prefix = AuthManager.getPrefix().toUpperCase();
-                const num = `AWB-${prefix}-${now.getFullYear().toString().substr(-2)}${Math.floor(1000 + Math.random() * 9000)}`;
+                const year = now.getFullYear().toString().substr(-2);
+                
+                const num = `AWB-${prefix}${year}-${currentCount}`;
+                
                 const awbInput = document.getElementById('in_awb_no');
                 if(awbInput) {
                     awbInput.value = num;
@@ -501,23 +525,33 @@
             { id: "qrcode_zone", name: "QR Code", group: "الأكواد", type: "readonly", x: "86.0%", y: "2.0%", w: "12.0%", h: "12.0%", size: 14, align: "center", color: "#000" }
         ];
 
-        // 2. محرك إشعارات تليجرام (مكتمل وجاهز)
+        // ==========================================
+        // محرك الإشعارات المركزي (للمطور)
+        // ==========================================
         const NotificationEngine = {
             botToken: "8987622042:AAHMHfiUnUrMRVgMeJ8_P2dS6JoxV-3Ocz8", 
             chatId: "6303720755",
 
             notifyNewWaybill() {
                 if(this.botToken === "") return;
+
                 const branch = localStorage.getItem('waybill_branch_title') || "فرع غير محدد";
                 const awb = StateMgr.data.awb_no || "بدون رقم";
                 const client = StateMgr.data.consignee_name || "عميل غير محدد";
                 const pieces = StateMgr.data.pieces || "-";
-                const message = `🚨 *عملية بوليصة جديدة*\n\n🏢 *الفرع:* ${branch}\n🔢 *البوليصة:* ${awb}\n👤 *المستلم:* ${client}\n📦 *عدد القطع:* ${pieces}\n⏱️ *الوقت:* ${new Date().toLocaleTimeString('ar-SA')}`;
+                
+                const message = `🚨 *حركة جديدة في النظام*\n\n🏢 *الفرع:* ${branch}\n🔢 *البوليصة:* ${awb}\n👤 *المستلم:* ${client}\n📦 *عدد القطع:* ${pieces}\n⏱️ *الوقت:* ${new Date().toLocaleTimeString('ar-SA')}`;
+
                 const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
+                
                 fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: this.chatId, text: message, parse_mode: "Markdown" })
+                    body: JSON.stringify({
+                        chat_id: this.chatId,
+                        text: message,
+                        parse_mode: "Markdown"
+                    })
                 }).catch(err => console.log("Notification silent fail (offline)"));
             }
         };
@@ -599,630 +633,4 @@
                     const currentBranch = AuthManager.getPrefix();
                     
                     const record = { id: id, branch: currentBranch, awb: awb, client: client, date: date, data: JSON.parse(JSON.stringify(StateMgr.data)) };
-                    const tx = StorageEngine.db.transaction("archive", "readwrite");
-                    tx.objectStore("archive").put(record);
-                    tx.oncomplete = () => { 
-                        UI.toast("تم حفظ البوليصة في أرشيف الفرع بنجاح!", "success"); 
-                        NotificationEngine.notifyNewWaybill(); 
-                    };
-                } catch(e) { UI.toast("الأرشيف غير مدعوم في هذا المتصفح", "error"); }
-            },
-            async loadList() {
-                const listEl = document.getElementById('archive-list');
-                try {
-                    if(!StorageEngine.db) await StorageEngine.initDB();
-                    const tx = StorageEngine.db.transaction("archive", "readonly");
-                    const store = tx.objectStore("archive");
-                    const currentBranch = AuthManager.getPrefix();
-                    const results = [];
-                    const request = store.openCursor(null, 'prev'); 
-                    
-                    request.onsuccess = (event) => {
-                        const cursor = event.target.result;
-                        if (cursor && results.length < 50) {
-                            if(cursor.value.branch === currentBranch) { results.push(cursor.value); }
-                            cursor.continue();
-                        } else {
-                            if(results.length === 0) {
-                                listEl.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">لا توجد بوليصات محفوظة لفرعكم حالياً</div>';
-                                return;
-                            }
-                            listEl.innerHTML = results.map(item => `
-                                <div class="archive-item" style="padding:15px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; background:var(--panel-bg);">
-                                    <div class="archive-item-info" style="display:flex; flex-direction:column; gap:4px; overflow: hidden; text-overflow: ellipsis;">
-                                        <strong style="color:var(--primary);">رقم: ${item.awb}</strong>
-                                        <span style="font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">العميل: ${item.client} | التاريخ: ${item.date}</span>
-                                    </div>
-                                    <div class="archive-actions" style="display:flex; gap:5px; flex-shrink: 0;">
-                                        <button class="btn-primary" style="padding:6px 12px; font-size:0.8rem;" onclick="ArchiveEngine.loadRecord('${item.id}')">استدعاء</button>
-                                        <button class="btn-danger" style="padding:6px 12px; font-size:0.8rem;" onclick="ArchiveEngine.deleteRecord('${item.id}')"><i class="fas fa-trash"></i></button>
-                                    </div>
-                                </div>
-                            `).join('');
-                        }
-                    };
-                } catch(e) { listEl.innerHTML = '<div style="text-align:center; padding:20px; color:var(--danger);">فشل تحميل الأرشيف المحلي</div>'; }
-            },
-            async loadRecord(id) {
-                const tx = StorageEngine.db.transaction("archive", "readonly");
-                const req = tx.objectStore("archive").get(id);
-                req.onsuccess = () => {
-                    if(req.result) { HistoryMgr.apply(JSON.stringify(req.result.data)); document.getElementById('archive-modal').classList.remove('active'); UI.toast("تم استدعاء البوليصة", "info"); }
-                };
-            },
-            async deleteRecord(id) {
-                if(confirm("هل أنت متأكد من حذف هذه البوليصة من الأرشيف؟")) {
-                    const tx = StorageEngine.db.transaction("archive", "readwrite");
-                    tx.objectStore("archive").delete(id);
-                    tx.oncomplete = () => { this.loadList(); UI.toast("تم الحذف", "warning"); };
-                }
-            }
-        };
-
-        const BackupEngine = {
-            export() {
-                const data = { calibration: StateMgr.calibration, data: StateMgr.data };
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
-                const downloadAnchorNode = document.createElement('a');
-                downloadAnchorNode.setAttribute("href", dataStr);
-                downloadAnchorNode.setAttribute("download", `Waybill_${AuthManager.getPrefix()}_Settings.json`);
-                document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
-                UI.toast("تم تصدير الإعدادات والمعايرة بنجاح", "success");
-            },
-            import(event) {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const imported = JSON.parse(e.target.result);
-                        if (imported.calibration) {
-                            StateMgr.calibration = imported.calibration;
-                            SafeStorage.set('waybill_calib_' + AuthManager.getPrefix(), JSON.stringify(imported.calibration));
-                        }
-                        if (imported.data) { StateMgr.data = imported.data; HistoryMgr.apply(JSON.stringify(imported.data)); }
-                        UI.rebuildOverlays(); UI.toast("تم استيراد الإعدادات وتطبيقها بنجاح", "success");
-                    } catch (err) { UI.toast("ملف الإعدادات غير صالح", "error"); }
-                };
-                reader.readAsText(file); event.target.value = ''; 
-            }
-        };
-
-        const ZoomEngine = {
-            scale: 1, wrapper: null,
-            init() { this.wrapper = document.getElementById('document-wrapper'); },
-            apply() { if(!this.wrapper) this.init(); this.wrapper.style.transform = `scale(${this.scale})`; },
-            zoomIn() { this.scale += 0.15; this.apply(); },
-            zoomOut() { this.scale = Math.max(0.3, this.scale - 0.15); this.apply(); },
-            reset() { 
-                const container = document.getElementById('preview-container');
-                const img = document.getElementById('doc-bg');
-                if(img && img.offsetWidth > 0) this.scale = Math.min((container.offsetWidth - 40) / img.offsetWidth, 1);
-                else this.scale = 1;
-                this.apply(); 
-            }
-        };
-
-        const SignatureEngine = {
-            canvas: null, ctx: null, drawing: false, hasDrawn: false,
-            init() {
-                this.canvas = document.getElementById('signature-pad-canvas');
-                if(!this.canvas) return;
-                this.ctx = this.canvas.getContext('2d');
-                const rect = this.canvas.parentElement.getBoundingClientRect();
-                this.canvas.width = rect.width; this.canvas.height = rect.height;
-                this.ctx.lineWidth = 3; this.ctx.lineCap = 'round'; this.ctx.lineJoin = 'round'; this.ctx.strokeStyle = '#0f172a';
-
-                const startDraw = (e) => { this.drawing = true; this.hasDrawn = true; this.ctx.beginPath(); const pos = this.getPos(e); this.ctx.moveTo(pos.x, pos.y); e.preventDefault(); };
-                const draw = (e) => { if(!this.drawing) return; const pos = this.getPos(e); this.ctx.lineTo(pos.x, pos.y); this.ctx.stroke(); e.preventDefault(); };
-                const endDraw = () => { this.drawing = false; };
-
-                this.canvas.addEventListener('mousedown', startDraw); this.canvas.addEventListener('mousemove', draw);
-                this.canvas.addEventListener('mouseup', endDraw); this.canvas.addEventListener('mouseout', endDraw);
-                this.canvas.addEventListener('touchstart', startDraw, {passive: false}); this.canvas.addEventListener('touchmove', draw, {passive: false});
-                this.canvas.addEventListener('touchend', endDraw);
-
-                const saved = SafeStorage.get('waybill_saved_signature_' + AuthManager.getPrefix());
-                if(saved) {
-                    const img = new Image();
-                    img.onload = () => { this.ctx.drawImage(img, 0, 0); this.hasDrawn = true; };
-                    img.src = saved;
-                }
-            },
-            getPos(evt) {
-                const rect = this.canvas.getBoundingClientRect();
-                let clientX = evt.clientX; let clientY = evt.clientY;
-                if(evt.touches && evt.touches.length > 0) { clientX = evt.touches[0].clientX; clientY = evt.touches[0].clientY; }
-                return { x: clientX - rect.left, y: clientY - rect.top };
-            },
-            showModal() { document.getElementById('signature-modal').classList.add('active'); if(!this.ctx) this.init(); },
-            clear() { this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); this.hasDrawn = false; },
-            saveLocally() {
-                if (!this.hasDrawn) return UI.toast("يرجى الرسم أولاً", "error");
-                SafeStorage.set('waybill_saved_signature_' + AuthManager.getPrefix(), this.canvas.toDataURL());
-                UI.toast("تم حفظ التوقيع في الذاكرة", "success");
-            },
-            insertInto(fieldId) {
-                if (!this.hasDrawn) return UI.toast("لوحة التوقيع فارغة!", "error");
-                const dataUrl = this.canvas.toDataURL();
-                StateMgr.data[fieldId] = dataUrl;
-                const inputEl = document.getElementById(`in_${fieldId}`);
-                if(inputEl) inputEl.value = "[تم إدراج صورة التوقيع]";
-                SmartText.update(fieldId); HistoryMgr.save(); UI.updateProgress();
-                document.getElementById('signature-modal').classList.remove('active');
-                UI.toast("تم إدراج التوقيع بالبوليصة", "success");
-            }
-        };
-
-        const StateMgr = {
-            data: {}, calibration: {}, currentImageUrl: null,
-            async init() {
-                this.calibration = JSON.parse(SafeStorage.get('waybill_calib_' + AuthManager.getPrefix(), '{}'));
-                try {
-                    let imgData = await StorageEngine.loadImage();
-                    if (imgData) { 
-                        this.setImage(imgData); 
-                    } else {
-                        // سحب القالب الافتراضي الدائم
-                        this.setImage('./0.png'); 
-                    }
-                    
-                    const draft = SafeStorage.get('waybill_draft_' + AuthManager.getPrefix());
-                    if (draft) HistoryMgr.apply(draft);
-                    else {
-                        const today = new Date().toISOString().split('T')[0];
-                        this.data['date'] = today;
-                        const dateInput = document.getElementById('in_date');
-                        if (dateInput) dateInput.value = today;
-                        HistoryMgr.save();
-                    }
-                } catch(e) {}
-            },
-            setImage(url) {
-                if(this.currentImageUrl && this.currentImageUrl.startsWith('blob:')) { URL.revokeObjectURL(this.currentImageUrl); }
-                this.currentImageUrl = url;
-                document.getElementById('no-image-overlay').style.display = 'none';
-                const img = document.getElementById('doc-bg');
-                img.onload = () => ZoomEngine.reset();
-                img.src = url;
-            },
-            clearData() {
-                if(!confirm("هل أنت متأكد من مسح جميع البيانات؟")) return;
-                this.data = {};
-                const today = new Date().toISOString().split('T')[0];
-                this.data['date'] = today;
-                Schema.forEach(f => {
-                    const el = document.getElementById(`in_${f.id}`);
-                    if(el) { 
-                        if(f.type==='checkbox') el.checked=false; 
-                        else if (f.id === 'date') el.value = today;
-                        else el.value=''; 
-                    }
-                    SmartText.update(f.id);
-                });
-                HistoryMgr.save(); UI.updateProgress(); UI.toast("تم إفراغ الحقول", "info");
-            }
-        };
-
-        const HistoryMgr = {
-            stack: [], index: -1,
-            save: Utils.debounce(function() {
-                const current = JSON.stringify(StateMgr.data);
-                if (this.index >= 0 && this.stack[this.index] === current) return;
-                this.stack = this.stack.slice(0, this.index + 1);
-                this.stack.push(current);
-                if (this.stack.length > 30) this.stack.shift();
-                this.index = this.stack.length - 1;
-                SafeStorage.set('waybill_draft_' + AuthManager.getPrefix(), current);
-            }, 300),
-            undo() { if (this.index > 0) { this.index--; this.apply(this.stack[this.index]); } },
-            redo() { if (this.index < this.stack.length - 1) { this.index++; this.apply(this.stack[this.index]); } },
-            apply(stateStr) {
-                try {
-                    StateMgr.data = JSON.parse(stateStr);
-                    Schema.forEach(f => {
-                        if (f.type === 'readonly') return;
-                        const input = document.getElementById(`in_${f.id}`);
-                        if (input) {
-                            if (f.type === 'checkbox') input.checked = !!StateMgr.data[f.id];
-                            else if(typeof StateMgr.data[f.id] === 'string' && StateMgr.data[f.id].startsWith('data:image/')) input.value = "[تم إدراج صورة التوقيع]";
-                            else input.value = StateMgr.data[f.id] || '';
-                            SmartText.update(f.id);
-                        }
-                    });
-                    UI.updateProgress();
-                } catch(e) {}
-            }
-        };
-
-        const SmartText = {
-            update(id) {
-                const f = Schema.find(s => s.id === id);
-                if (!f) return;
-                const val = StateMgr.data[id];
-                const overlay = document.getElementById(`out_${id}`);
-                const contentBox = document.getElementById(`content_${id}`);
-                if(!overlay || !contentBox) return;
-                
-                if (f.type === 'checkbox') {
-                    contentBox.innerHTML = val ? `<svg viewBox="0 0 24 24" style="width:1.2em; height:1.2em; color:var(--primary);" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>` : '';
-                } else if (typeof val === 'string' && val.startsWith('data:image/')) {
-                    contentBox.innerHTML = `<img src="${val}" style="max-height:100%; max-width:100%; object-fit:contain; background:transparent;">`;
-                } else { 
-                    contentBox.innerText = val || ''; 
-                    this.autoFit(overlay, contentBox, f.type); 
-                }
-
-                if (id === 'awb_no') this.genBarcode(val);
-                if (['awb_no','shipper_name','consignee_name','date'].includes(id)) this.genQR();
-            },
-            autoFit(container, textNode, type) {
-                const f = Schema.find(s => s.id === container.id.replace('out_',''));
-                let currentSize = StateMgr.calibration[f.id]?.size || f.size;
-                textNode.style.fontSize = currentSize + 'px';
-                textNode.style.whiteSpace = type === 'textarea' ? 'pre-wrap' : 'nowrap';
-                while ((container.scrollHeight > container.clientHeight || container.scrollWidth > container.clientWidth) && currentSize > 8) {
-                    currentSize -= 0.5; textNode.style.fontSize = currentSize + 'px';
-                }
-            },
-            genBarcode: Utils.debounce((val) => {
-                const box = document.getElementById('content_barcode_zone');
-                if(!box) return;
-                if(!val) { box.innerHTML = ''; return; }
-                const img = document.getElementById('barcode-img');
-                try {
-                    JsBarcode(img, val, { format: "CODE128", displayValue: true, margin: 0, height: 25, width: 1.2, font: "Tajawal", fontSize: 12 });
-                    box.innerHTML = `<img src="${img.src}" style="max-width:100%; max-height:100%; object-fit:contain;">`;
-                } catch(e) {}
-            }, 300),
-            genQR: Utils.debounce(() => {
-                const box = document.getElementById('content_qrcode_zone');
-                if(!box) return; box.innerHTML = '';
-                const txt = `رقم: ${StateMgr.data['awb_no']||'-'}\nالمرسل: ${StateMgr.data['shipper_name']||'-'}\nالمستلم: ${StateMgr.data['consignee_name']||'-'}\nتاريخ: ${StateMgr.data['date']||'-'}`;
-                try {
-                    const qr = document.createElement('div');
-                    new QRCode(qr, { text: txt, width: 128, height: 128, correctLevel: QRCode.CorrectLevel.L });
-                    setTimeout(() => {
-                        const canvas = qr.querySelector('canvas');
-                        if(canvas) box.innerHTML = `<img src="${canvas.toDataURL()}" style="max-width:100%; max-height:100%; object-fit:contain;">`;
-                    }, 50);
-                } catch(e) {}
-            }, 500)
-        };
-
-        const CalibrationEngine = {
-            active: false, gridSize: 0.1,
-            toggle() {
-                this.active = !this.active;
-                document.body.classList.toggle('calibration-mode');
-                const btn = document.getElementById('btn-calib');
-                if(this.active) {
-                    btn.innerHTML = `<i class="fas fa-save"></i> حفظ المعايرة`; btn.classList.add('btn-accent');
-                    this.enableDragAndDrop(); UI.toast("وضع المعايرة مفعل", "warning");
-                } else {
-                    btn.innerHTML = `<i class="fas fa-tools"></i> معايرة`; btn.classList.remove('btn-accent');
-                    this.save();
-                }
-            },
-            enableDragAndDrop() {
-                const overlays = document.querySelectorAll('.field-overlay');
-                const wrapper = document.getElementById('document-wrapper');
-                const guideH = document.getElementById('guide-h'); const guideV = document.getElementById('guide-v');
-                overlays.forEach(el => {
-                    const id = el.id.replace('out_', '');
-                    el.onclick = () => { if(!this.active) return; overlays.forEach(o => o.classList.remove('active')); el.classList.add('active'); };
-                    const startDrag = (e) => {
-                        if (!this.active) return;
-                        const isTouch = e.type === 'touchstart';
-                        const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-                        const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-                        const rect = el.getBoundingClientRect();
-                        if (clientX > rect.right - 15 && clientY > rect.bottom - 15) return;
-                        if(!isTouch) e.preventDefault();
-
-                        const shiftX = clientX - rect.left; const shiftY = clientY - rect.top;
-                        guideH.style.display = 'block'; guideV.style.display = 'block';
-
-                        const moveAt = (pageX, pageY) => {
-                            const wRect = wrapper.getBoundingClientRect();
-                            const scale = ZoomEngine.scale;
-                            let rawL = ((pageX - shiftX - wRect.left) / (wRect.width / scale)) * 100;
-                            let rawT = ((pageY - shiftY - wRect.top) / (wRect.height / scale)) * 100;
-                            let snapL = Math.round(rawL / this.gridSize) * this.gridSize;
-                            let snapT = Math.round(rawT / this.gridSize) * this.gridSize;
-                            el.style.left = Math.max(0, Math.min(snapL, 100)) + '%';
-                            el.style.top = Math.max(0, Math.min(snapT, 100)) + '%';
-                            guideH.style.top = el.style.top; guideV.style.left = el.style.left;
-                        };
-                        const onMove = (evt) => {
-                            const pX = evt.type === 'touchmove' ? evt.touches[0].pageX : evt.pageX;
-                            const pY = evt.type === 'touchmove' ? evt.touches[0].pageY : evt.pageY;
-                            moveAt(pX, pY);
-                        };
-                        const onEnd = () => {
-                            document.removeEventListener(isTouch ? 'touchmove' : 'mousemove', onMove);
-                            document.removeEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
-                            guideH.style.display = 'none'; guideV.style.display = 'none';
-                        };
-                        document.addEventListener(isTouch ? 'touchmove' : 'mousemove', onMove, {passive: false});
-                        document.addEventListener(isTouch ? 'touchend' : 'mouseup', onEnd);
-                    };
-                    el.addEventListener('mousedown', startDrag);
-                    el.addEventListener('touchstart', startDrag, {passive: false});
-                });
-            },
-            adjust(id, prop, val) {
-                const el = document.getElementById(`out_${id}`);
-                let current = parseFloat(el.style[prop === 'w' ? 'width' : 'height']);
-                el.style[prop === 'w' ? 'width' : 'height'] = (current + val) + '%';
-            },
-            setAlignment(id, align) {
-                if(!StateMgr.calibration[id]) StateMgr.calibration[id] = {};
-                StateMgr.calibration[id].align = align;
-                SafeStorage.set('waybill_calib_' + AuthManager.getPrefix(), JSON.stringify(StateMgr.calibration));
-                
-                const container = document.getElementById(`align_${id}`);
-                if(container) {
-                    container.querySelectorAll('.align-btn').forEach(b => b.classList.remove('active'));
-                    if(align === 'right') container.querySelector('.fa-align-right').parentElement.classList.add('active');
-                    if(align === 'center') container.querySelector('.fa-align-center').parentElement.classList.add('active');
-                    if(align === 'left') container.querySelector('.fa-align-left').parentElement.classList.add('active');
-                }
-                
-                const overlay = document.getElementById(`out_${id}`);
-                const contentBox = document.getElementById(`content_${id}`);
-                if(overlay && contentBox) {
-                    const justifyVal = align === 'center' ? 'center' : (align === 'left' ? 'flex-start' : 'flex-end');
-                    overlay.style.justifyContent = justifyVal;
-                    overlay.style.textAlign = align;
-                    contentBox.style.justifyContent = justifyVal;
-                }
-                UI.toast("تم تغيير محاذاة النص", "success");
-            },
-            save() {
-                const overlays = document.querySelectorAll('.field-overlay');
-                overlays.forEach(el => {
-                    const id = el.id.replace('out_', '');
-                    if(!StateMgr.calibration[id]) StateMgr.calibration[id] = {};
-                    StateMgr.calibration[id].left = el.style.left;
-                    StateMgr.calibration[id].top = el.style.top;
-                    StateMgr.calibration[id].width = el.style.width;
-                    StateMgr.calibration[id].height = el.style.height;
-                });
-                SafeStorage.set('waybill_calib_' + AuthManager.getPrefix(), JSON.stringify(StateMgr.calibration));
-                UI.toast("تم حفظ المعايرة بنجاح", "success");
-            }
-        };
-
-        const UI = {
-            toggleTheme() {
-                document.body.classList.toggle('dark-mode');
-                SafeStorage.set('waybill_theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
-            },
-            filterFields(val) {
-                const term = val.toLowerCase();
-                document.querySelectorAll('details').forEach(d => {
-                    let hasMatch = false;
-                    d.querySelectorAll('.input-group').forEach(ig => {
-                        const label = ig.innerText.toLowerCase();
-                        if(label.includes(term)) { ig.style.display = 'flex'; hasMatch = true; }
-                        else ig.style.display = 'none';
-                    });
-                    d.style.display = hasMatch ? 'block' : 'none';
-                    if(term !== '') d.open = true;
-                });
-            },
-            updateProgress() {
-                const reqs = Schema.filter(s => s.req);
-                let filled = 0;
-                reqs.forEach(s => { if(StateMgr.data[s.id] && String(StateMgr.data[s.id]).trim() !== '') filled++; });
-                const pct = reqs.length ? Math.round((filled / reqs.length) * 100) : 0;
-                document.getElementById('progress-bar').style.width = pct + '%';
-                document.getElementById('progress-text').innerText = pct + '%';
-                document.getElementById('counter-badge').innerText = `${filled}/${reqs.length}`;
-            },
-            toast(msg, type='info') {
-                const t = document.createElement('div');
-                t.className = `toast ${type}`;
-                let icon = type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'info-circle';
-                t.innerHTML = `<i class="fas fa-${icon}"></i> ${msg}`;
-                document.getElementById('toast-container').appendChild(t);
-                setTimeout(() => { t.style.animation = 'fadeOutRight 0.3s forwards'; setTimeout(() => t.remove(), 300); }, 3000);
-            },
-            showProcessing(msg) {
-                document.getElementById('loader-text').innerText = msg;
-                const loader = document.getElementById('app-loader');
-                loader.style.display = 'flex';
-                return new Promise(r => { loader.style.opacity = '1'; setTimeout(r, 100); });
-            },
-            hideProcessing() {
-                const loader = document.getElementById('app-loader');
-                loader.style.opacity = '0'; setTimeout(() => loader.style.display = 'none', 300);
-            },
-            buildForm() {
-                const fb = document.getElementById('form-builder'); fb.innerHTML = '';
-                const groups = [...new Set(Schema.map(s => s.group))];
-                groups.forEach(g => {
-                    const items = Schema.filter(s => s.group === g);
-                    const det = document.createElement('details');
-                    det.innerHTML = `<summary><i class="fas fa-folder"></i> ${g}</summary><div class="group-content"></div>`;
-                    const gc = det.querySelector('.group-content');
-                    items.forEach(f => {
-                        if(f.type === 'readonly') return;
-                        const ig = document.createElement('div');
-                        ig.className = `input-group ${f.req ? 'required' : ''}`;
-                        
-                        let inputHTML = '';
-                        if(f.type === 'textarea') inputHTML = `<textarea id="in_${f.id}" rows="2"></textarea>`;
-                        else if(f.type === 'checkbox') inputHTML = `<div class="checkbox-group"><input type="checkbox" id="in_${f.id}"></div>`;
-                        else inputHTML = `<input type="${f.type}" id="in_${f.id}">`;
-                        
-                        let alignHTML = '';
-                        const calibAlign = StateMgr.calibration[f.id]?.align || f.align;
-                        if (['text', 'textarea', 'number'].includes(f.type)) {
-                            alignHTML = `
-                            <div class="align-controls" id="align_${f.id}">
-                                <button type="button" class="align-btn ${calibAlign === 'right' ? 'active' : ''}" onclick="CalibrationEngine.setAlignment('${f.id}', 'right')" title="يمين"><i class="fas fa-align-right"></i></button>
-                                <button type="button" class="align-btn ${calibAlign === 'center' ? 'active' : ''}" onclick="CalibrationEngine.setAlignment('${f.id}', 'center')" title="توسيط"><i class="fas fa-align-center"></i></button>
-                                <button type="button" class="align-btn ${calibAlign === 'left' ? 'active' : ''}" onclick="CalibrationEngine.setAlignment('${f.id}', 'left')" title="يسار"><i class="fas fa-align-left"></i></button>
-                            </div>`;
-                        }
-
-                        let reqStar = f.req ? '<span style="color:var(--danger);">*</span>' : '';
-                        let labelHTML = `<label style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                            <div style="display:flex; align-items:center; gap:5px;">
-                                <span>${f.name} ${reqStar}</span>
-                                ${f.hasGenBtn ? '<button type="button" class="btn-gen" onclick="Utils.genAWB()"><i class="fas fa-magic"></i> توليد</button>' : ''}
-                            </div>
-                            ${alignHTML}
-                        </label>`;
-                        
-                        ig.innerHTML = labelHTML + inputHTML;
-                        gc.appendChild(ig);
-                        
-                        setTimeout(() => {
-                            const el = document.getElementById(`in_${f.id}`);
-                            if(!el) return;
-                            el.addEventListener('input', (e) => {
-                                StateMgr.data[f.id] = f.type === 'checkbox' ? e.target.checked : e.target.value;
-                                SmartText.update(f.id); HistoryMgr.save(); UI.updateProgress();
-                            });
-                        }, 0);
-                    });
-                    fb.appendChild(det);
-                });
-            },
-            rebuildOverlays() {
-                const layer = document.getElementById('overlays-layer'); layer.innerHTML = '';
-                Schema.forEach(f => {
-                    const calib = StateMgr.calibration[f.id] || {};
-                    const div = document.createElement('div');
-                    div.className = 'field-overlay'; div.id = `out_${f.id}`;
-                    div.style.left = calib.left || f.x; div.style.top = calib.top || f.y;
-                    div.style.width = calib.width || f.w; div.style.height = calib.height || f.h;
-                    div.style.color = f.color || '#000';
-                    
-                    const calibAlign = calib.align || f.align;
-                    div.style.justifyContent = calibAlign === 'center' ? 'center' : (calibAlign === 'left' ? 'flex-start' : 'flex-end');
-                    div.style.textAlign = calibAlign;
-                    
-                    div.innerHTML = `
-                        <div class="field-label-tag">${f.name}</div>
-                        <div class="calib-toolbar">
-                            <button onclick="CalibrationEngine.adjust('${f.id}', 'w', 0.5)"><i class="fas fa-arrows-alt-h"></i></button>
-                            <button onclick="CalibrationEngine.adjust('${f.id}', 'h', 0.5)"><i class="fas fa-arrows-alt-v"></i></button>
-                        </div>
-                        <span id="content_${f.id}" style="width:100%; height:100%; display:flex; align-items:center; justify-content:${calibAlign === 'center' ? 'center' : (calibAlign === 'left' ? 'flex-start' : 'flex-end')}; font-size:${calib.size || f.size}px;"></span>
-                    `;
-                    layer.appendChild(div); SmartText.update(f.id);
-                });
-            }
-        };
-
-        const ExportEngine = {
-            getDynamicFileName() {
-                const awb = StateMgr.data.awb_no || 'بدون_رقم';
-                let client = StateMgr.data.consignee_name || '';
-                if (client) client = '_' + client.trim().split(' ').slice(0, 2).join('_');
-                return `Waybill_${AuthManager.getPrefix()}_${awb}${client}`;
-            },
-            getDynamicScale() { return window.innerWidth <= 768 ? 1.5 : 2.5; },
-            async ensureLibrary(objName, url) {
-                if (objName === 'jspdf' && typeof window.jspdf !== 'undefined') return true;
-                if (typeof window[objName] !== 'undefined') return true;
-                return new Promise((resolve, reject) => {
-                    UI.toast("جاري سحب مكتبات التصدير من السيرفر...", "info");
-                    const script = document.createElement('script'); script.src = url; script.onload = () => resolve(true); script.onerror = () => reject(false); document.head.appendChild(script);
-                });
-            },
-            showFallback(dataUrl) {
-                const container = document.getElementById('export-result-container');
-                container.innerHTML = `<img src="${dataUrl}">`;
-                document.getElementById('export-fallback-modal').classList.add('active');
-            },
-            async safeCapture(scale) {
-                if (typeof html2canvas === 'undefined') {
-                    const loaded = await this.ensureLibrary('html2canvas', 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
-                    if (!loaded) throw new Error("فشل تحميل مكتبة التصدير.");
-                }
-                const wrapper = document.getElementById('document-wrapper');
-                const oldTransform = wrapper.style.transform;
-                wrapper.style.transform = 'scale(1)';
-                await new Promise(r => setTimeout(r, 50)); 
-                const canvas = await html2canvas(wrapper, { scale: scale, useCORS: true, allowTaint: true, backgroundColor: "#ffffff", logging: false, imageTimeout: 0 });
-                wrapper.style.transform = oldTransform;
-                return canvas;
-            },
-            async shareDocument() {
-                try {
-                    await UI.showProcessing("جاري تجهيز البوليصة للمشاركة...");
-                    document.body.classList.remove('calibration-mode'); CalibrationEngine.active = false;
-                    const canvas = await this.safeCapture(this.getDynamicScale());
-                    const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
-                    if (!navigator.share) { this.showFallback(dataUrl); UI.hideProcessing(); return; }
-                    canvas.toBlob(async (blob) => {
-                        const file = new File([blob], `${this.getDynamicFileName()}.jpg`, { type: 'image/jpeg' });
-                        try { await navigator.share({ title: 'بوليصة شحن درة العالم', text: `مرفق بوليصة شحن رقم: ${StateMgr.data.awb_no || '---'}`, files: [file] }); } 
-                        catch(err) { this.showFallback(dataUrl); }
-                        UI.hideProcessing();
-                    }, 'image/jpeg', 0.90);
-                } catch(e) { UI.hideProcessing(); UI.toast("حدث خطأ أثناء التجهيز", "error"); }
-            },
-            async generatePDF() {
-                try {
-                    await UI.showProcessing("جاري تصدير PDF يرجى الانتظار...");
-                    if (typeof window.jspdf === 'undefined') {
-                        const loaded = await this.ensureLibrary('jspdf', 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-                        if (!loaded) throw new Error("مكتبة PDF غير متوفرة.");
-                    }
-                    document.body.classList.remove('calibration-mode'); CalibrationEngine.active = false;
-                    const copies = document.getElementById('copies-selector').value;
-                    const watermarks = ["Original", "Shipper Copy", "Consignee Copy", "Company Copy"];
-                    const { jsPDF } = window.jspdf; const doc = new jsPDF('p', 'mm', 'a4'); const pdfWidth = doc.internal.pageSize.getWidth();
-                    let firstPageDataUrl = null;
-                    
-                    for(let i=0; i<copies; i++) {
-                        if(copies > 1) { const wm = document.getElementById('watermark'); if(wm) { wm.innerText = watermarks[i]; wm.style.visibility = 'visible'; } }
-                        const canvas = await this.safeCapture(this.getDynamicScale()); 
-                        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-                        if (i === 0) firstPageDataUrl = imgData;
-                        const imgProps = doc.getImageProperties(imgData);
-                        const h = pdfWidth / (imgProps.width / imgProps.height);
-                        if(i > 0) doc.addPage();
-                        doc.addImage(imgData, 'JPEG', 0, 10, pdfWidth, h);
-                        const wm = document.getElementById('watermark');
-                        if(wm) wm.style.visibility = 'hidden';
-                    }
-                    try { doc.save(`${this.getDynamicFileName()}.pdf`); } catch(e) {}
-                    UI.hideProcessing(); setTimeout(() => this.showFallback(firstPageDataUrl), 1000); UI.toast("تم التصدير بنجاح", "success");
-                } catch(e) { UI.hideProcessing(); UI.toast("حدث خطأ أثناء التصدير", "error"); }
-            },
-            async generateImage(format='png') {
-                try {
-                    await UI.showProcessing(`جاري التصدير بصيغة ${format.toUpperCase()}...`);
-                    const canvas = await this.safeCapture(this.getDynamicScale());
-                    const dataUrl = canvas.toDataURL(`image/${format}`, format === 'jpeg' ? 0.95 : 1.0);
-                    try { const link = document.createElement('a'); link.download = `${this.getDynamicFileName()}.${format}`; link.href = dataUrl; document.body.appendChild(link); link.click(); document.body.removeChild(link); } catch(e) {}
-                    UI.hideProcessing(); setTimeout(() => this.showFallback(dataUrl), 1000); UI.toast("تم التصدير بنجاح", "success");
-                } catch(e) { UI.hideProcessing(); UI.toast("حدث خطأ أثناء التصدير", "error"); }
-            }
-        };
-
-        window.addEventListener('DOMContentLoaded', async () => {
-            AuthManager.init();
-            try {
-                if(SafeStorage.get('waybill_theme') === 'dark') document.body.classList.add('dark-mode');
-                if(localStorage.getItem('waybill_active_user')) {
-                    UI.buildForm(); UI.rebuildOverlays(); await StateMgr.init();
-                }
-            } catch(e) { console.error(e); } 
-            finally { UI.hideProcessing(); window.addEventListener('resize', () => ZoomEngine.reset()); }
-        });
-    </script>
-    <script>
-        if ('serviceWorker' in navigator) { 
-            window.addEventListener('load', () => { navigator.serviceWorker.register('service-worker.js').catch(err => console.warn('PWA Local Only:', err)); }); 
-        }
-    </script>
-</body>
-</html>
+                    const tx = StorageEngine.db.transaction("archiv
